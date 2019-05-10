@@ -1,6 +1,7 @@
 #include<stdio.h> 
-#include<stdlib.h> 
+#include<ctype.h>
 #include<stdbool.h> 
+#include<stdlib.h> 
 #include<string.h> 
 #include<unistd.h> 
 #include <pthread.h>
@@ -21,6 +22,7 @@ const char check[100] = {"/home/paksi/config.crontab"};
 #define C (1 << 5)
 #define P (1 << 6)
 
+int n = 0;
 time_t t;
 struct tm currT;
 typedef struct com
@@ -198,40 +200,31 @@ void setCmd(cmd *curr, char *conv, char flag)
   }
 }
 
-// void *Exec(void *args)  // di check_time panggil fungsi ini
-// {
-//     arg *tmp = (arg*) args;
-//     int i = tmp->i;
-
-//     int fd[2], status;
-//     pid_t pid;
-//     char result[100];
-
-//     pipe(fd);
-//     if ( (pid = fork() ) == -1)
-//     {
-//         fprintf(stderr, "FORK failed");
-//         return NULL;
-//     } 
-//     else if( pid == 0) 
-//     {
-//         dup2(fd[1], 1);
-//         close(fd[0]);
-//         execlp("/bin/sh","/bin/sh",cmdtest[i],NULL);
-//     }
-//     wait(NULL);
-//     read(fd[0], result, sizeof(result));
-//     printf("%s",result);
-
-//     return NULL;
-// }
+void check_time()
+{   
+    time_t raw;
+    struct tm * info;
+    int i;
+    time ( &raw );
+    info = localtime ( &raw );
+    for(i=0 ; i<=n; i++){
+    if(info->tm_min==doThis[i].execT.tm_min&&info->tm_hour==doThis[i].execT.tm_hour&&info->tm_mday==doThis[i].execT.tm_mday&&info->tm_mon==doThis[i].execT.tm_mon){
+        printf("%d %d %d\n",doThis[i].execT.tm_min, info->tm_sec,info->tm_min);
+         incTime(&doThis[i]);  
+         printf("%d %d %d\n",doThis[i].execT.tm_min, info->tm_sec,info->tm_min);
+         system(doThis[i].ex);
+    }
+    }
+    //check waktu setiap struct com di array
+    // sementara bikin aja yg bisa ngecek * * * * *, yg benernya gw yg bikin
+    // jika waktunya utk dijalankan panggil thread dgn fungsi Exec() yg diatas utk menjalankan program
+}
 
 void read_conf()
 {
     FILE *fp;
     fp = fopen(check,"r");
     char read[10][100];
-    int n = 0;
     t = time(NULL);
     currT = *localtime(&t);
     int stage=0;
@@ -262,12 +255,6 @@ void read_conf()
     fclose(fp);
 }
 
-void check_time()
-{
-    //check waktu setiap struct com di array
-    // sementara bikin aja yg bisa ngecek * * * * *, yg benernya gw yg bikin
-    // jika waktunya utk dijalankan panggil thread dgn fungsi Exec() yg diatas utk menjalankan program
-}
 
 int main() {
   pid_t pid, sid;
@@ -312,6 +299,7 @@ int main() {
             old_time =newTime;
             read_conf();
         }
+        check_time();
         //check_time()  --> fungsi buat check apakah command udh waktunya diexec
     sleep(1);
   }
