@@ -22,7 +22,7 @@ typedef struct com              // menampung command yg harus dijalankan sama ka
     struct tm time_exec;      // waktu kapan harus dieksekusi
 } cmd;
 
-char isi_file[100];              // kumpulan command yg dijalankantaro disini
+cmd isi_file[100];              // kumpulan command yg dijalankantaro disini
 
 void *Exec(void *args)  // di check_time panggil fungsi ini
 {
@@ -55,29 +55,24 @@ void *Exec(void *args)  // di check_time panggil fungsi ini
 void read_conf()
 {
     FILE *fp = fopen(check, "r");
-    cmd isi;
-
-        int count = 0;
-        char word[100];
+    int count = 0;
+    char word[100];
+    int i =0;
 
         while (fscanf(fp, "%s", word) != EOF) {
             if(++count==7){
-                 strcpy(isi.path_prog,word);
-                 printf("%s\n", isi.path_prog);
+                 strcpy(isi_file[i].path_prog,word);
+                 printf("%s\n", isi_file[i].path_prog);
+                 i++;
                  count = 0;
             }
             if(count==6){
-                 strcpy(isi.command,word);
-                 printf("%s\n", isi.command);
+                 strcpy(isi_file[i].command,word);
+                 printf("%s\n", isi_file[i].command);
             }
         }
     fclose(fp);
 
-    FILE *sp = fopen(check, "r");
-        fgets(isi_file, 60, sp);
-        isi_file[strlen(isi_file)] = '\0';
-        printf("%s\n", isi_file );
-    fclose(sp);
 }
 
 void check_time()
