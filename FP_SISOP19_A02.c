@@ -41,36 +41,51 @@ void incTime(cmd *curr)
 {
     curr->execT.tm_sec =0; 
 
-
     if (curr->flags & MI)
     {
-        curr->execT.tm_min += 1;     
-    }
+        curr->execT.tm_min += 1;
+        if(curr->execT.tm_min == 60)
+        {
+            curr->execT.tm_min = 0;
+            if (curr->flags & H) curr->execT.tm_hour += 1;
+            else if (curr->flags & D) curr->execT.tm_mday += 1;
+            else if (curr->flags & MO) curr->execT.tm_mon += 1;
+            else curr->execT.tm_year += 1; 
+        }
+    }        
     if (curr->flags & H)
     {
-        if (curr->flags & MI)
-            {if(curr->execT.tm_min == 0) curr->execT.tm_hour += 1; }
-        else curr->execT.tm_hour += 1;
-    }
+        if (!(curr->flags & MI)) curr->execT.tm_hour += 1;
+        if(curr->execT.tm_hour == 24)
+        {
+            curr->execT.tm_hour = 0;
+            if (curr->flags & D) curr->execT.tm_mday += 1;
+            else if (curr->flags & MO) curr->execT.tm_mon += 1;
+            else curr->execT.tm_year += 1; 
+        }
+    }        
     if (curr->flags & D)
     {
-        if (curr->flags & H )  
-            {if(curr->execT.tm_hour == 0) curr->execT.tm_mday += 1;} 
-        else if (curr->flags & (~H | MI)  )
-            {if (curr->execT.tm_min == 0) curr->execT.tm_mday += 1;}
-        else if (curr->flags & (~H | ~MI)) curr->execT.tm_mday += 1;
-    } 
+        if (!( curr->flags & (H | MI) ) ) curr->execT.tm_mday += 1;
+        mktime(&curr->execT);
+        if (!(curr->flags & MO) && curr->execT.tm_mday == 1)
+        {
+            curr->execT.tm_year += 1; 
+            curr->execT.tm_mon -= 1;
+            mktime(&curr->execT);
+        }
+    }
     if (curr->flags & MO)
     {
-        if (curr->flags & D) 
-            {if (curr->execT.tm_mday == 1) curr->execT.tm_mon += 1; }
-        else if (curr->flags & (~D | H) ) 
-            {if (curr->execT.tm_hour == 0) curr->execT.tm_mon += 1; }
-        else if (curr->flags & (~D |~H | MI ) )
-             {if (curr->execT.tm_min == 0) curr->execT.tm_mon += 1;}
-        else if (curr->flags & ~(D | H | MI))  curr->execT.tm_mon += 1;
-        if (curr->execT.tm_mon == 0) curr->execT.tm_year += 1;
+        if (!(curr->flags & (D | H | MI)))  curr->execT.tm_mon += 1;
+        mktime(&curr->execT);
     }
+    else
+    {
+        if (!(curr->flags & (D | H | MI)))  curr->execT.tm_year += 1; 
+    }
+               
+    
 
 
 }
@@ -105,9 +120,9 @@ void setCmd(cmd *curr, char *conv, char flag)
         else if (conv[0] == '*')
         {
             curr->flags |= H;
-            if (curr->execT.tm_min <  currT.tm_min || ((curr->flags & MI ) && curr->execT.tm_min == 0))
-                curr->execT.tm_hour += 1; 
+            if (!(curr->flags & MI)) curr->execT.tm_hour += 1;
         }
+            
         break;
     case D:
         if (isdigit(conv[0]))
@@ -120,14 +135,13 @@ void setCmd(cmd *curr, char *conv, char flag)
                 if (curr->flags & H) curr->execT.tm_hour = 0;
                 if (curr->flags & MI) curr->execT.tm_min = 0;
             }
-                
         }
         else if (conv[0] == '*')
         {
             curr->flags |= D;
-            if (curr->execT.tm_hour <  currT.tm_hour || ((curr->flags & H ) && curr->execT.tm_hour == 0))
-                curr->execT.tm_mday += 1; 
-                
+            if ( !(curr->flags & H) && curr->execT.tm_hour <= currT.tm_hour) 
+                if ( curr->execT.tm_min < currT.tm_min) curr->execT.tm_mday += 1; 
+            else if (!( curr->flags & (H | MI) ) ) curr->execT.tm_mday += 1;
         }
         break;
     case MO:
@@ -142,25 +156,19 @@ void setCmd(cmd *curr, char *conv, char flag)
                 if (curr->flags & H) curr->execT.tm_hour = 0;
                 if (curr->flags & MI) curr->execT.tm_min = 0; 
             }
-            if (curr->execT.tm_mon <  currT.tm_mon) 
-                curr->execT.tm_year += 1;
-            else if (curr->execT.tm_mday <  currT.tm_mday)
-                curr->execT.tm_year += 1;
-            else if (curr->execT.tm_hour <  currT.tm_hour)
-                curr->execT.tm_year += 1;
-            else if (curr->execT.tm_min <  currT.tm_min)
-                curr->execT.tm_year += 1;
+            if (curr->execT.tm_mon < currT.tm_mon) curr->execT.tm_year += 1; 
+            else if ( !(curr->flags & D) && curr->execT.tm_mday <= currT.tm_mday) 
+                     if (  curr->execT.tm_hour < currT.tm_hour)  curr->execT.tm_year += 1;
+            else if (!(curr->flags & (D | H | MI)))  curr->execT.tm_year += 1;  
         }
         else if (conv[0] == '*')
         {
             curr->flags |= MO;
-            if (curr->execT.tm_mday <  currT.tm_mday || ((curr->flags & D ) && curr->execT.tm_mday == 1))
-            {
-                curr->execT.tm_mon += 1; 
-                if (curr->execT.tm_mon == 0) curr->execT.tm_year += 1;
-            }
-
+            if ( !(curr->flags & D) && curr->execT.tm_mday <= currT.tm_mday) 
+                if ( curr->execT.tm_hour < currT.tm_hour) curr->execT.tm_mon += 1;
+            else if (!(curr->flags & (D | H | MI)))  curr->execT.tm_mon += 1;
         }
+            
         break;
     case W:
         if (isdigit(conv[0]))
