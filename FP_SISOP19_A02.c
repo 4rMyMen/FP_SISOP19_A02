@@ -11,9 +11,7 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <sys/types.h>
-pthread_t tid[3];
-const char cmdtest[2][100] = {"/home/paksi/abc.sh","/home/paksi/cde.sh"};
-const char check[100] = {"/home/paksi/config.crontab"};
+const char check[100] = {"/home/bimo/Desktop/testingfp/config.crontab"};
 #define MI (1 << 0)
 #define H (1 << 1)
 #define D (1 << 2)
@@ -21,22 +19,20 @@ const char check[100] = {"/home/paksi/config.crontab"};
 #define W (1 << 4)
 #define C (1 << 5)
 #define P (1 << 6)
-
+#define PI (1 << 7)
 int n = 0;
 time_t t;
 struct tm currT;
 typedef struct com
 {
-    char flags;
+    __u_char flags;
     struct tm execT;
     char cm[100];
     char ex[100];
+    char pip[100];
 }cmd;
 
 cmd doThis[10];
-
-char isi_file[100];              // kumpulan command yg dijalankantaro disini
-
 void incTime(cmd *curr)
 {
     curr->execT.tm_sec =0; 
@@ -86,11 +82,10 @@ void incTime(cmd *curr)
     }
                
     
-
+    
 
 }
-
-void setCmd(cmd *curr, char *conv, char flag)
+void setCmd(cmd *curr, char *conv, __u_char flag)
 {
     curr->execT.tm_sec =0; 
     switch (flag)
@@ -180,60 +175,110 @@ void setCmd(cmd *curr, char *conv, char flag)
         }
         break;
     case C:
-        if ((strcmp(conv,"bash")) == 0)
+        if ((strstr(conv,"/")) != NULL)
         {
-            strcpy(curr->cm,"/bin/sh");
-            curr->flags |= C;
+            strcpy(curr->ex,conv);
+            curr->flags |= P;
         }
-        else if ((strstr(conv,"/")) != NULL)
-        {
-            strcpy(curr->cm,conv);
-            curr->flags |= C;
-        }
-        
         break;
     case P:
-        if (curr->flags & P)
+        if ((strstr(conv,"/")) != NULL)
         {
-            sprintf(curr->ex,"%s %s",curr->ex, conv);
-        } 
-        else if ((strstr(conv,"/")) != NULL)
+            strcpy(curr->cm,curr->ex);
+            memmove(curr->ex,conv,strlen(conv) + 1);
+            curr->flags |= C;
+        }
+        else if (conv[0] == '|' || conv[0] == '>')
         {
-            sprintf(curr->ex,"%s %s",curr->cm, conv);
-            curr->flags |= P;
-        } 
+            strcpy(curr->pip,conv);
+            curr->flags |= PI;
+        }
+         
         break;
+    case PI:
+        if (curr->flags & PI)
+            sprintf(curr->pip,"%s %s",curr->pip,conv);
+        else if (conv[0] == '|' || conv[0] == '>')
+        {
+            strcpy(curr->pip,conv);
+            curr->flags |= PI;
+        }
+        break;         
+
     default:
         break;
   }
   mktime(&curr->execT);
 }
 
-void check_time()
-{   
+void Exec(cmd *curr)  // di check_time panggil fungsi ini
+{
+
+    int fd[2];
+    pid_t pid;
+
+
+    pipe(fd);
+    if ( (pid = fork() ) == -1)
+    {
+        fprintf(stderr, "FORK failed");
+        return;
+    } 
+    else if( pid == 0) 
+    {
+        dup2(fd[1], 1);
+        close(fd[0]);
+        if (curr->flags & C)
+            execlp(curr->cm,curr->cm,curr->ex,NULL);
+        else execlp(curr->ex,curr->ex,NULL);
+    }
+    wait(NULL);
+
+    return;
+}
+
+void *check_com(void* arg)
+{
+    cmd *curr =  (cmd*) arg;
     time_t raw;
     struct tm * info;
-    int i;
     time ( &raw );
     info = localtime ( &raw );
-    for(i=0 ; i<=n; i++){
-    if(info->tm_min==doThis[i].execT.tm_min&&info->tm_hour==doThis[i].execT.tm_hour&&info->tm_mday==doThis[i].execT.tm_mday&&info->tm_mon==doThis[i].execT.tm_mon){
-        printf("%d %d %d\n",doThis[i].execT.tm_min, info->tm_sec,info->tm_min);
-         incTime(&doThis[i]);  
-         printf("%d %d %d\n",doThis[i].execT.tm_min, info->tm_sec,info->tm_min);
-         system(doThis[i].ex);
+
+    if(info->tm_min != curr->execT.tm_min) return NULL;      
+    if(info->tm_hour != curr->execT.tm_hour) return NULL;     
+    if(info->tm_mday != curr->execT.tm_mday) 
+    {
+        if (curr->flags & W)
+            if (info->tm_wday != curr->execT.tm_wday) return NULL;
+        else return NULL;
+    }      
+    if(info->tm_mon != curr->execT.tm_mon) return NULL;
+    Exec(curr);
+    incTime(curr);
+    return NULL;
+}
+
+void check_time()
+{   
+    int i;
+           
+    pthread_t *tid = (pthread_t*)malloc(n * sizeof(pthread_t));
+    for(i=0 ; i<n; i++)
+    {
+        pthread_create(&tid[i],NULL,  &check_com, (void*) &doThis[i]);
     }
+    for (int i = 0; i < n; i++)
+    {
+        pthread_join(tid[i],NULL);
     }
-    //check waktu setiap struct com di array
-    // sementara bikin aja yg bisa ngecek * * * * *, yg benernya gw yg bikin
-    // jika waktunya utk dijalankan panggil thread dgn fungsi Exec() yg diatas utk menjalankan program
+    free(tid);
 }
 
 void read_conf()
 {
     FILE *fp;
-    fp = fopen(check,"r");
-    char read[10][100];
+    fp = fopen("/home/bimo/Desktop/testingfp/config.crontab","r");
     t = time(NULL);
     currT = *localtime(&t);
     int stage=0;
@@ -249,13 +294,14 @@ void read_conf()
         }
  
         setCmd(&doThis[n],word, (1 << stage));
-        if (stage < 6) stage++;
+        if (stage < 7) stage++;
         if (enter[0] == '\n')
         {
             stage = 0;
-            puts(asctime(&doThis[n].execT));
-            puts(doThis[n].cm);
-            puts(doThis[n].ex);
+            // puts(asctime(&doThis[n].execT));
+            // puts(doThis[n].cm);
+            // puts(doThis[n].ex);
+            // puts(doThis[n].pip);
             n++;
         }
         memset(word,'\0',sizeof(word));
@@ -266,7 +312,7 @@ void read_conf()
 
 
 int main() {
-  pid_t pid, sid;
+    pid_t pid, sid;
     struct stat sb;
     stat(check,&sb);
     time_t old_time = sb.st_mtime;
@@ -301,15 +347,14 @@ int main() {
   while(1) {
     // main program here
     struct stat st;
-        stat(check,&st);
-        time_t newTime = sb.st_mtime;;
-        if (difftime(newTime,old_time) > 0)
-        {
-            old_time =newTime;
-            read_conf();
-        }
-        check_time();
-        //check_time()  --> fungsi buat check apakah command udh waktunya diexec
+    stat(check,&st);
+    time_t newTime = sb.st_mtime;;
+    if (difftime(newTime,old_time) > 0)
+    {
+        old_time =newTime;
+        read_conf();
+    }
+    check_time();
     sleep(1);
   }
   
