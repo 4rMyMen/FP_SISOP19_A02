@@ -206,6 +206,7 @@ void setCmd(cmd *curr, char *conv, char flag)
     default:
         break;
   }
+  mktime(&curr->execT);
 }
 
 void check_time()
