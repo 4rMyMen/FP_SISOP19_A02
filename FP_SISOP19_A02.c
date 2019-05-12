@@ -12,6 +12,7 @@
 #include <time.h>
 #include <sys/types.h>
 const char check[100] = {"/home/bimo/Desktop/testingfp/config.crontab"};
+const char logcron[100] = {"/home/bimo/Desktop/crontab.log"};
 #define MI (1 << 0)
 #define H (1 << 1)
 #define D (1 << 2)
@@ -22,6 +23,7 @@ const char check[100] = {"/home/bimo/Desktop/testingfp/config.crontab"};
 #define PI (1 << 7)
 #define head "#!/bin/bash\nvar=\"$(</dev/stdin)\"\n"
 #define var "echo \"$var\" "
+pthread_mutex_t mtx = PTHREAD_MUTEX_INITIALIZER;
 typedef struct com
 {
     __u_char flags;
@@ -35,11 +37,15 @@ typedef struct config
     int n;
     time_t t;
     struct tm currT;
+    time_t mod;
+    struct tm modT;
     cmd *doThis;
 
 }conf;
 
 conf con;
+
+FILE *logging;
 
 void incTime(cmd *curr)
 {
@@ -322,30 +328,38 @@ void Exec(cmd *curr)
 void *check_com(void* arg)
 {
     cmd *curr =  (cmd*) arg;
+
     time_t raw;
-    struct tm * info;
+    struct tm info;
     char w = 'n';
     time ( &raw );
-    info = localtime ( &raw );
-
-    if(info->tm_min != curr->execT.tm_min) return NULL;      
-    if(info->tm_hour != curr->execT.tm_hour) return NULL;     
-    if(info->tm_mday != curr->execT.tm_mday) 
+    info = *localtime ( &raw );
+    if(info.tm_min != curr->execT.tm_min) return NULL;      
+    if(info.tm_hour != curr->execT.tm_hour) return NULL;     
+    if(info.tm_mday != curr->execT.tm_mday) 
     {
         if (!(curr->flags & W))
         {
-            if (info->tm_wday != curr->execT.tm_wday) return NULL;
+            if (info.tm_wday != curr->execT.tm_wday) return NULL;
             else w = 'y';
         }  
         else
         {
-            if (curr->execT.tm_mday == 29 && curr->execT.tm_mon == 1 && info->tm_year > curr->execT.tm_year)
+            if (curr->execT.tm_mday == 29 && curr->execT.tm_mon == 1 && info.tm_year > curr->execT.tm_year)
                 curr->execT.tm_year +=1;
             return NULL;
         } 
     }      
-    if(info->tm_mon != curr->execT.tm_mon) return NULL;
+    if(info.tm_mon != curr->execT.tm_mon) return NULL;
     Exec(curr);
+    pthread_mutex_lock(&mtx);
+    logging = fopen(logcron,"a+");
+    char loginf[500];
+    memset(loginf,'\0',sizeof(loginf));
+    sprintf(loginf,"%s %s Executed at : %s\n", curr->cm,curr->ex, asctime(&info) );
+    fprintf(logging,loginf);
+    fclose(logging);
+    pthread_mutex_unlock(&mtx);
     if (w != 'y') incTime(curr);
     return NULL;
 }
@@ -369,14 +383,17 @@ void check_time(cmd *curr)
 
 void read_conf()
 {
+    logging = fopen(logcron,"a+");
     con.n =0;
-    FILE *fp,*ap;
-    ap = fopen(check,"a+");
-    fputs("\n",ap);
-    fclose(ap);
+    FILE *fp;
     fp = fopen(check,"r");
     con.t = time(NULL);
     con.currT = *localtime(&con.t);
+    char loginf[500];
+    memset(loginf,'\0',sizeof(loginf));
+    sprintf(loginf,"File modified at : %s\n", asctime(&con.modT));
+    fprintf(logging,loginf);
+    fclose(logging);
     time_t old = con.t;
     int stage=0, i=1, reloc = 0;
     char word[100],enter[2];
@@ -438,10 +455,12 @@ void read_conf()
 }
 
 int main() {
+    
     pid_t pid, sid;
     struct stat sb;
     stat(check,&sb);
-    con.t = sb.st_mtime;
+    con.mod = sb.st_mtime;
+    con.modT = *localtime(&con.mod);
 
   pid = fork();
 
@@ -470,17 +489,21 @@ int main() {
   close(STDERR_FILENO);
 
     read_conf();
+
   while(1) {
     // main program here
+
     struct stat st;
     stat(check,&st);
     time_t newTime = st.st_mtime;
-    if (difftime(newTime,con.t) > 0)
+    if (difftime(newTime,con.mod) > 0)
     {
-        con.t =newTime;
+        con.mod = newTime;
+        con.modT = *localtime(&con.mod);
         read_conf();
     }
     check_time(con.doThis);
+
     sleep(1);
   }
   
