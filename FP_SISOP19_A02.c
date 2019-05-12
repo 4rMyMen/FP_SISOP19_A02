@@ -33,6 +33,7 @@ typedef struct com
 }cmd;
 
 cmd doThis[10];
+
 void incTime(cmd *curr)
 {
     curr->execT.tm_sec =0; 
@@ -80,12 +81,10 @@ void incTime(cmd *curr)
     {
         if (!(curr->flags & (D | H | MI)))  curr->execT.tm_year += 1; 
     }
-               
-    
-    
 
 }
-void setCmd(cmd *curr, char *conv, __u_char flag)
+
+int setCmd(cmd *curr, char *conv, __u_char flag)
 {
     curr->execT.tm_sec =0; 
     switch (flag)
@@ -96,12 +95,15 @@ void setCmd(cmd *curr, char *conv, __u_char flag)
             char *end;
             int num = strtol(conv,&end,10);
             if (num > -1 && num < 60) curr->execT.tm_min = num;
+            else return 0;
+
         }
         else if (conv[0] == '*')
         {
             curr->flags |= MI;
             curr->execT.tm_min += 1;     
         }
+        else return 0;
         break;
     case H:
 
@@ -110,14 +112,15 @@ void setCmd(cmd *curr, char *conv, __u_char flag)
             char *end;
             int num = strtol(conv,&end,10);
             if (num > -1 && num < 24) curr->execT.tm_hour = num;
+            else return 0;
             if ((curr->flags & MI) && curr->execT.tm_hour != currT.tm_hour) curr->execT.tm_min = 0;
         }
         else if (conv[0] == '*')
         {
             curr->flags |= H;
-            if (!(curr->flags & MI)) curr->execT.tm_hour += 1;
+            if (!(curr->flags & MI) && curr->execT.tm_min < currT.tm_min) curr->execT.tm_hour += 1;
         }
-            
+        else return 0;
         break;
     case D:
         if (isdigit(conv[0]))
@@ -125,6 +128,7 @@ void setCmd(cmd *curr, char *conv, __u_char flag)
             char *end;
             int num = strtol(conv,&end,10);
             if (num > -1 && num < 32) curr->execT.tm_mday = num;
+            else return 0;
             if  (curr->execT.tm_mday != currT.tm_mday) 
             {
                 if (curr->flags & H) curr->execT.tm_hour = 0;
@@ -136,8 +140,10 @@ void setCmd(cmd *curr, char *conv, __u_char flag)
             curr->flags |= D;
             if ( !(curr->flags & H) && curr->execT.tm_hour <= currT.tm_hour) 
                 if ( curr->execT.tm_min < currT.tm_min) curr->execT.tm_mday += 1; 
-            else if (!( curr->flags & (H | MI) ) ) curr->execT.tm_mday += 1;
+            else if (!( curr->flags & (H | MI) ) 
+                && curr->execT.tm_hour < currT.tm_hour) curr->execT.tm_mday += 1;
         }
+        else return 0;
         break;
     case MO:
         if (isdigit(conv[0]))
@@ -145,6 +151,7 @@ void setCmd(cmd *curr, char *conv, __u_char flag)
             char *end;
             int num = strtol(conv,&end,10);
             if (num > 0 && num < 13) curr->execT.tm_mon = num -1;
+            else return 0;
             if (curr->execT.tm_mon != currT.tm_mon) 
             {
                 if (curr->flags & D) curr->execT.tm_mday = 1;
@@ -154,25 +161,30 @@ void setCmd(cmd *curr, char *conv, __u_char flag)
             if (curr->execT.tm_mon < currT.tm_mon) curr->execT.tm_year += 1; 
             else if ( !(curr->flags & D) && curr->execT.tm_mday <= currT.tm_mday) 
                      if (  curr->execT.tm_hour < currT.tm_hour)  curr->execT.tm_year += 1;
-            else if (!(curr->flags & (D | H | MI)))  curr->execT.tm_year += 1;  
+            else if (!(curr->flags & (D | H | MI)) 
+                && curr->execT.tm_mon < currT.tm_mon)  curr->execT.tm_year += 1;  
         }
         else if (conv[0] == '*')
         {
             curr->flags |= MO;
             if ( !(curr->flags & D) && curr->execT.tm_mday <= currT.tm_mday) 
                 if ( curr->execT.tm_hour < currT.tm_hour) curr->execT.tm_mon += 1;
-            else if (!(curr->flags & (D | H | MI)))  curr->execT.tm_mon += 1;
+            else if (!(curr->flags & (D | H | MI)) 
+                && curr->execT.tm_mday < currT.tm_mday)  curr->execT.tm_mon += 1;
         }
-            
+        else return 0;          
         break;
     case W:
         if (isdigit(conv[0]))
         {
-            curr->flags |= W;
             char *end;
             int num = strtol(conv,&end,10);
             if (num > -1 && num < 7) curr->execT.tm_wday = num;
+            else return 0;
         }
+        else if (conv[0] == '*')
+            curr->flags |= W;
+        else return 0;
         break;
     case C:
         if ((strstr(conv,"/")) != NULL)
@@ -180,6 +192,7 @@ void setCmd(cmd *curr, char *conv, __u_char flag)
             strcpy(curr->ex,conv);
             curr->flags |= P;
         }
+        else return 0;
         break;
     case P:
         if ((strstr(conv,"/")) != NULL)
@@ -193,7 +206,7 @@ void setCmd(cmd *curr, char *conv, __u_char flag)
             strcpy(curr->pip,conv);
             curr->flags |= PI;
         }
-         
+        else return 0;       
         break;
     case PI:
         if (curr->flags & PI)
@@ -203,15 +216,17 @@ void setCmd(cmd *curr, char *conv, __u_char flag)
             strcpy(curr->pip,conv);
             curr->flags |= PI;
         }
+        else return 0;
         break;         
 
     default:
         break;
   }
   mktime(&curr->execT);
+  return 1;
 }
 
-void Exec(cmd *curr)  // di check_time panggil fungsi ini
+void Exec(cmd *curr) 
 {
 
     int fd[2];
@@ -242,6 +257,8 @@ void *check_com(void* arg)
     cmd *curr =  (cmd*) arg;
     time_t raw;
     struct tm * info;
+    char w = 'n';
+    printf("there\n");
     time ( &raw );
     info = localtime ( &raw );
 
@@ -249,13 +266,22 @@ void *check_com(void* arg)
     if(info->tm_hour != curr->execT.tm_hour) return NULL;     
     if(info->tm_mday != curr->execT.tm_mday) 
     {
-        if (curr->flags & W)
+        if (!(curr->flags & W))
+        {
             if (info->tm_wday != curr->execT.tm_wday) return NULL;
-        else return NULL;
+            else w = 'y';
+        }  
+        else
+        {
+            if (curr->execT.tm_mday == 29 && curr->execT.tm_mon == 1 && info->tm_year > curr->execT.tm_year)
+                curr->execT.tm_year +=1;
+            return NULL;
+        } 
     }      
     if(info->tm_mon != curr->execT.tm_mon) return NULL;
     Exec(curr);
-    incTime(curr);
+    if (w != 'y') incTime(curr);
+    printf("done\n");
     return NULL;
 }
 
@@ -264,6 +290,7 @@ void check_time()
     int i;
            
     pthread_t *tid = (pthread_t*)malloc(n * sizeof(pthread_t));
+     printf("here\n");
     for(i=0 ; i<n; i++)
     {
         pthread_create(&tid[i],NULL,  &check_com, (void*) &doThis[i]);
@@ -277,13 +304,16 @@ void check_time()
 
 void read_conf()
 {
-    FILE *fp;
+    FILE *fp,*ap;
+    ap = fopen("/home/bimo/Desktop/testingfp/config.crontab","a+");
+    fputs("\n",ap);
+    fclose(ap);
     fp = fopen("/home/bimo/Desktop/testingfp/config.crontab","r");
     t = time(NULL);
     currT = *localtime(&t);
     int stage=0;
     char word[100],enter[2];
-    
+    int status = 1;
 
     while (fscanf(fp, "%s%c", word, enter) == 2) {
         
@@ -292,12 +322,16 @@ void read_conf()
             doThis[n].flags = 0;
             doThis[n].execT = currT;
         }
- 
-        setCmd(&doThis[n],word, (1 << stage));
-        if (stage < 7) stage++;
+        if (status == 1)
+        {
+            status = setCmd(&doThis[n],word, (1 << stage));
+            if (stage < 7) stage++;
+        }
         if (enter[0] == '\n')
         {
             stage = 0;
+            status = 1;
+            if (!(doThis[n].flags & P)) continue;
             // puts(asctime(&doThis[n].execT));
             // puts(doThis[n].cm);
             // puts(doThis[n].ex);
