@@ -16,7 +16,7 @@ Buatlah program C yang menyerupai crontab menggunakan daemon dan thread. Ada seb
  
 #### Membuat Fungsi Parsing Instruksi 
 
-  * Setiap line di-parsing dengan urutan dari waktu eksekusi sampai ke program yg dijalanakan.
+  * Setiap line di-parsing kata per kata dengan urutan dari waktu eksekusi sampai ke program yg dijalankan.
   
 #### Membuat Fungsi Pengecek Waktu Eksekusi
   
@@ -24,7 +24,7 @@ Buatlah program C yang menyerupai crontab menggunakan daemon dan thread. Ada seb
  
 #### Membuat Fungsi Pengecek Modifikasi File
   
-  * Pemodifikasian file dicek dengan melihat waktu modifikasi file. Jika ada perubahan waktu modifikasi file, fungsi pembaca akan dijalankan lagi
+  * Pemodifikasian file dicek dengan melihat waktu modifikasi file. Jika ada perubahan waktu modifikasi file, fungsi pembaca akan dijalankan lagi. Fungsi ini dijalankan di while loop daemon.
  
  
  
