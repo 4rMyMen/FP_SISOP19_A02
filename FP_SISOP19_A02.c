@@ -307,9 +307,11 @@ void Exec(cmd *curr)
             close(fd[1]);
             execlp("/bin/bash", "/bin/bash",buf,NULL); 
             }
+            int childstatus;
+         
             close(fd[0]);
             close(fd[1]);
-            sleep(1);
+            waitpid(pid, &childstatus, 0); 
             remove(buf);
         }
         
