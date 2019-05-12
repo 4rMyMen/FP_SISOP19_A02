@@ -20,10 +20,8 @@ const char check[100] = {"/home/bimo/Desktop/testingfp/config.crontab"};
 #define C (1 << 5)
 #define P (1 << 6)
 #define PI (1 << 7)
-
-
-
-
+#define head "#!/bin/bash\nvar=\"$(</dev/stdin)\"\n"
+#define var "echo \"$var\" "
 typedef struct com
 {
     __u_char flags;
@@ -220,7 +218,7 @@ int setCmd(cmd *curr, char *conv, __u_char flag)
         }
         else if (conv[0] == '|' || conv[0] == '>')
         {
-            strcpy(curr->pip,conv);
+            sprintf(curr->pip,"%s%s",var,conv);
             curr->flags |= PI;
         }
         else return 0;       
@@ -230,7 +228,7 @@ int setCmd(cmd *curr, char *conv, __u_char flag)
             sprintf(curr->pip,"%s %s",curr->pip,conv);
         else if (conv[0] == '|' || conv[0] == '>')
         {
-            strcpy(curr->pip,conv);
+            sprintf(curr->pip,"%s%s",var,conv);
             curr->flags |= PI;
         }
         else return 0;
@@ -248,24 +246,74 @@ void Exec(cmd *curr)
 
     int fd[2];
     pid_t pid;
-
-
-    pipe(fd);
-    if ( (pid = fork() ) == -1)
+    char buf[100];
+    if (!(curr->flags & PI))
     {
-        fprintf(stderr, "FORK failed");
-        return;
-    } 
-    else if( pid == 0) 
-    {
-        dup2(fd[1], 1);
-        close(fd[0]);
-        if (curr->flags & C)
-            execlp(curr->cm,curr->cm,curr->ex,NULL);
-        else execlp(curr->ex,curr->ex,NULL);
+        pipe(fd);
+        if ( (pid = fork() ) == -1)
+        {
+            fprintf(stderr, "FORK failed");
+            return;
+        } 
+        else if( pid == 0) 
+        {
+            dup2(fd[1], 1);
+            close(fd[0]);
+            if (curr->flags & C)
+                execlp(curr->cm,curr->cm,curr->ex,NULL);
+            else execlp(curr->ex,curr->ex,NULL);
+        }
+        wait(NULL);
     }
-    wait(NULL);
+    else
+    {
+        FILE *fp;
+        int fn;
 
+        srand(time(NULL));
+        fn = rand();
+        memset(buf,'\0',sizeof(buf));
+        sprintf(buf,"/tmp/temp%d.sh",fn);
+        fp = fopen(buf,"w");
+        fputs(head,fp);
+        fputs(curr->pip,fp);
+        fclose(fp);
+        pipe(fd);
+        if ( (pid = fork() ) == -1)
+        {
+            fprintf(stderr, "FORK failed");
+            return;
+        } 
+        else if (pid  == 0) {
+                            
+            dup2(fd[1], 1);
+            close(fd[0]);
+            close(fd[1]);
+            if (curr->flags & C)
+                execlp(curr->cm,curr->cm,curr->ex,NULL);
+            else execlp(curr->ex,curr->ex,NULL);   
+        }
+        else
+        {
+            if ( (pid = fork() ) == -1)
+            {
+                fprintf(stderr, "FORK failed");
+                return;
+            } 
+            else if (pid  == 0) { 
+            
+            dup2(fd[0], 0);
+            close(fd[0]);
+            close(fd[1]);
+            execlp("/bin/bash", "/bin/bash",buf,NULL); 
+            }
+            close(fd[0]);
+            close(fd[1]);
+            sleep(1);
+            remove(buf);
+        }
+        
+    }
     return;
 }
 
@@ -275,7 +323,6 @@ void *check_com(void* arg)
     time_t raw;
     struct tm * info;
     char w = 'n';
-    printf("there\n");
     time ( &raw );
     info = localtime ( &raw );
 
@@ -298,19 +345,17 @@ void *check_com(void* arg)
     if(info->tm_mon != curr->execT.tm_mon) return NULL;
     Exec(curr);
     if (w != 'y') incTime(curr);
-    printf("done\n");
     return NULL;
 }
 
-void check_time()
+void check_time(cmd *curr)
 {   
     int i;
            
     pthread_t *tid = (pthread_t*)malloc(con.n * sizeof(pthread_t));
-     printf("here\n");
     for(i=0 ; i<con.n; i++)
     {
-        pthread_create(&tid[i],NULL,  &check_com, (void*) &con.doThis[i]);
+        pthread_create(&tid[i],NULL,  &check_com, (void*) &curr[i]);
     }
     for (int i = 0; i < con.n; i++)
     {
@@ -330,6 +375,7 @@ void read_conf()
     fp = fopen(check,"r");
     con.t = time(NULL);
     con.currT = *localtime(&con.t);
+    time_t old = con.t;
     int stage=0, i=1, reloc = 0;
     char word[100],enter[2];
     memset(word,'\0',sizeof(word));
@@ -360,6 +406,12 @@ void read_conf()
             puts(curr.cm);
             puts(curr.ex);
             puts(curr.pip);
+            time_t new = time(NULL);
+            if (difftime(new,old) > 20)
+            {
+                old = new;
+                check_time(arrCmd);
+            }
             if (con.n % 9 == 0)
             {
                 i++;
@@ -382,7 +434,6 @@ void read_conf()
     free(arrCmd);
     fclose(fp);
 }
-
 
 int main() {
     pid_t pid, sid;
@@ -427,7 +478,7 @@ int main() {
         con.t =newTime;
         read_conf();
     }
-    check_time();
+    check_time(con.doThis);
     sleep(1);
   }
   
