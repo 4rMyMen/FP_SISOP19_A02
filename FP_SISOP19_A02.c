@@ -305,10 +305,10 @@ void check_time()
 void read_conf()
 {
     FILE *fp,*ap;
-    ap = fopen("/home/bimo/Desktop/testingfp/config.crontab","a+");
+    ap = fopen(check,"a+");
     fputs("\n",ap);
     fclose(ap);
-    fp = fopen("/home/bimo/Desktop/testingfp/config.crontab","r");
+    fp = fopen(check,"r");
     t = time(NULL);
     currT = *localtime(&t);
     int stage=0;
@@ -349,7 +349,7 @@ int main() {
     pid_t pid, sid;
     struct stat sb;
     stat(check,&sb);
-    time_t old_time = sb.st_mtime;
+    t = sb.st_mtime;
 
   pid = fork();
 
@@ -382,10 +382,10 @@ int main() {
     // main program here
     struct stat st;
     stat(check,&st);
-    time_t newTime = sb.st_mtime;;
-    if (difftime(newTime,old_time) > 0)
+    time_t newTime = st.st_mtime;
+    if (difftime(newTime,t) > 0)
     {
-        old_time =newTime;
+        t =newTime;
         read_conf();
     }
     check_time();
