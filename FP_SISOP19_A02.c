@@ -20,19 +20,28 @@ const char check[100] = {"/home/bimo/Desktop/testingfp/config.crontab"};
 #define C (1 << 5)
 #define P (1 << 6)
 #define PI (1 << 7)
-int n = 0;
-time_t t;
-struct tm currT;
+
+
+
+
 typedef struct com
 {
     __u_char flags;
     struct tm execT;
     char cm[100];
     char ex[100];
-    char pip[100];
+    char pip[200];
 }cmd;
+typedef struct config
+{
+    int n;
+    time_t t;
+    struct tm currT;
+    cmd *doThis;
 
-cmd doThis[10];
+}conf;
+
+conf con;
 
 void incTime(cmd *curr)
 {
@@ -113,12 +122,12 @@ int setCmd(cmd *curr, char *conv, __u_char flag)
             int num = strtol(conv,&end,10);
             if (num > -1 && num < 24) curr->execT.tm_hour = num;
             else return 0;
-            if ((curr->flags & MI) && curr->execT.tm_hour != currT.tm_hour) curr->execT.tm_min = 0;
+            if ((curr->flags & MI) && curr->execT.tm_hour != con.currT.tm_hour) curr->execT.tm_min = 0;
         }
         else if (conv[0] == '*')
         {
             curr->flags |= H;
-            if (!(curr->flags & MI) && curr->execT.tm_min < currT.tm_min) curr->execT.tm_hour += 1;
+            if (!(curr->flags & MI) && curr->execT.tm_min < con.currT.tm_min) curr->execT.tm_hour += 1;
         }
         else return 0;
         break;
@@ -129,7 +138,7 @@ int setCmd(cmd *curr, char *conv, __u_char flag)
             int num = strtol(conv,&end,10);
             if (num > -1 && num < 32) curr->execT.tm_mday = num;
             else return 0;
-            if  (curr->execT.tm_mday != currT.tm_mday) 
+            if  (curr->execT.tm_mday != con.currT.tm_mday) 
             {
                 if (curr->flags & H) curr->execT.tm_hour = 0;
                 if (curr->flags & MI) curr->execT.tm_min = 0;
@@ -138,10 +147,10 @@ int setCmd(cmd *curr, char *conv, __u_char flag)
         else if (conv[0] == '*')
         {
             curr->flags |= D;
-            if ( !(curr->flags & H) && curr->execT.tm_hour <= currT.tm_hour) 
-                if ( curr->execT.tm_min < currT.tm_min) curr->execT.tm_mday += 1; 
+            if ( !(curr->flags & H) && curr->execT.tm_hour <= con.currT.tm_hour) 
+                if ( curr->execT.tm_min < con.currT.tm_min) curr->execT.tm_mday += 1; 
             else if (!( curr->flags & (H | MI) ) 
-                && curr->execT.tm_hour < currT.tm_hour) curr->execT.tm_mday += 1;
+                && curr->execT.tm_hour < con.currT.tm_hour) curr->execT.tm_mday += 1;
         }
         else return 0;
         break;
@@ -152,25 +161,25 @@ int setCmd(cmd *curr, char *conv, __u_char flag)
             int num = strtol(conv,&end,10);
             if (num > 0 && num < 13) curr->execT.tm_mon = num -1;
             else return 0;
-            if (curr->execT.tm_mon != currT.tm_mon) 
+            if (curr->execT.tm_mon != con.currT.tm_mon) 
             {
                 if (curr->flags & D) curr->execT.tm_mday = 1;
                 if (curr->flags & H) curr->execT.tm_hour = 0;
                 if (curr->flags & MI) curr->execT.tm_min = 0; 
             }
-            if (curr->execT.tm_mon < currT.tm_mon) curr->execT.tm_year += 1; 
-            else if ( !(curr->flags & D) && curr->execT.tm_mday <= currT.tm_mday) 
-                     if (  curr->execT.tm_hour < currT.tm_hour)  curr->execT.tm_year += 1;
+            if (curr->execT.tm_mon < con.currT.tm_mon) curr->execT.tm_year += 1; 
+            else if ( !(curr->flags & D) && curr->execT.tm_mday <= con.currT.tm_mday) 
+                     if (  curr->execT.tm_hour < con.currT.tm_hour)  curr->execT.tm_year += 1;
             else if (!(curr->flags & (D | H | MI)) 
-                && curr->execT.tm_mon < currT.tm_mon)  curr->execT.tm_year += 1;  
+                && curr->execT.tm_mon < con.currT.tm_mon)  curr->execT.tm_year += 1;  
         }
         else if (conv[0] == '*')
         {
             curr->flags |= MO;
-            if ( !(curr->flags & D) && curr->execT.tm_mday <= currT.tm_mday) 
-                if ( curr->execT.tm_hour < currT.tm_hour) curr->execT.tm_mon += 1;
+            if ( !(curr->flags & D) && curr->execT.tm_mday <= con.currT.tm_mday) 
+                if ( curr->execT.tm_hour < con.currT.tm_hour) curr->execT.tm_mon += 1;
             else if (!(curr->flags & (D | H | MI)) 
-                && curr->execT.tm_mday < currT.tm_mday)  curr->execT.tm_mon += 1;
+                && curr->execT.tm_mday < con.currT.tm_mday)  curr->execT.tm_mon += 1;
         }
         else return 0;          
         break;
@@ -189,6 +198,8 @@ int setCmd(cmd *curr, char *conv, __u_char flag)
     case C:
         if ((strstr(conv,"/")) != NULL)
         {
+            struct stat tmp;
+            if(stat(conv,&tmp) != 0 ) return 0;
             strcpy(curr->ex,conv);
             curr->flags |= P;
         }
@@ -197,6 +208,12 @@ int setCmd(cmd *curr, char *conv, __u_char flag)
     case P:
         if ((strstr(conv,"/")) != NULL)
         {
+            struct stat tmp;
+            if(stat(conv,&tmp) != 0 )
+            { 
+                curr->flags &= ~P;
+                return 0;
+            }
             strcpy(curr->cm,curr->ex);
             memmove(curr->ex,conv,strlen(conv) + 1);
             curr->flags |= C;
@@ -289,58 +306,80 @@ void check_time()
 {   
     int i;
            
-    pthread_t *tid = (pthread_t*)malloc(n * sizeof(pthread_t));
+    pthread_t *tid = (pthread_t*)malloc(con.n * sizeof(pthread_t));
      printf("here\n");
-    for(i=0 ; i<n; i++)
+    for(i=0 ; i<con.n; i++)
     {
-        pthread_create(&tid[i],NULL,  &check_com, (void*) &doThis[i]);
+        pthread_create(&tid[i],NULL,  &check_com, (void*) &con.doThis[i]);
     }
-    for (int i = 0; i < n; i++)
+    for (int i = 0; i < con.n; i++)
     {
         pthread_join(tid[i],NULL);
     }
     free(tid);
 }
 
+
 void read_conf()
 {
+    con.n =0;
     FILE *fp,*ap;
     ap = fopen(check,"a+");
     fputs("\n",ap);
     fclose(ap);
     fp = fopen(check,"r");
-    t = time(NULL);
-    currT = *localtime(&t);
-    int stage=0;
+    con.t = time(NULL);
+    con.currT = *localtime(&con.t);
+    int stage=0, i=1, reloc = 0;
     char word[100],enter[2];
+    memset(word,'\0',sizeof(word));
     int status = 1;
-
-    while (fscanf(fp, "%s%c", word, enter) == 2) {
+    cmd *arrCmd = (cmd*)malloc(10*sizeof(cmd));
+    cmd curr;
+    while (fscanf(fp, "%s%c", word, enter) == 2) 
+    {
         
         if (stage == 0)
         {
-            doThis[n].flags = 0;
-            doThis[n].execT = currT;
+            cmd empty;
+            curr = empty;
+            curr.flags = 0;
+            curr.execT = con.currT;
         }
         if (status == 1)
         {
-            status = setCmd(&doThis[n],word, (1 << stage));
+            status = setCmd(&curr,word, (1 << stage));
             if (stage < 7) stage++;
         }
         if (enter[0] == '\n')
         {
             stage = 0;
             status = 1;
-            if (!(doThis[n].flags & P)) continue;
-            // puts(asctime(&doThis[n].execT));
-            // puts(doThis[n].cm);
-            // puts(doThis[n].ex);
-            // puts(doThis[n].pip);
-            n++;
+            if (!(curr.flags & P)) continue;
+            puts(asctime(&curr.execT));
+            puts(curr.cm);
+            puts(curr.ex);
+            puts(curr.pip);
+            if (con.n % 9 == 0)
+            {
+                i++;
+                cmd *temp = arrCmd;
+                arrCmd = (cmd*)realloc(arrCmd,i*10*sizeof(cmd));
+                if(arrCmd == NULL)
+                {
+                    arrCmd = temp;
+                    free(temp);
+                }
+            }
+            arrCmd[con.n] = curr;
+            con.n++;
         }
+        con.doThis = arrCmd;
+
         memset(word,'\0',sizeof(word));
         
     }
+    free(arrCmd);
     fclose(fp);
 }
 
@@ -349,7 +388,7 @@ int main() {
     pid_t pid, sid;
     struct stat sb;
     stat(check,&sb);
-    t = sb.st_mtime;
+    con.t = sb.st_mtime;
 
   pid = fork();
 
@@ -377,15 +416,15 @@ int main() {
   close(STDOUT_FILENO);
   close(STDERR_FILENO);
 
-  read_conf();
+    read_conf();
   while(1) {
     // main program here
     struct stat st;
     stat(check,&st);
     time_t newTime = st.st_mtime;
-    if (difftime(newTime,t) > 0)
+    if (difftime(newTime,con.t) > 0)
     {
-        t =newTime;
+        con.t =newTime;
         read_conf();
     }
     check_time();
